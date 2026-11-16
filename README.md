@@ -212,5 +212,3 @@ DA3Camera_v2/
 ## 📄 License
 
 This project is developed for research and development purposes.
-
-For questions or issues, please submit an issue at [https://github.com/laurapzz/DA3Camera_v2/issues](https://github.com/laurapzz/DA3Camera_v2/issues).
