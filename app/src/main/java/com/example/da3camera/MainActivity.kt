@@ -1360,18 +1360,17 @@ class MainActivity : AppCompatActivity() {
                             Log.d("DA3_RANSAC", "Inlier ratio: ${planeResult.inlierRatio}")
                             Log.d("DA3_RANSAC", "Tilt: ${planeResult.tiltDeg}°, Roll: ${planeResult.rollDeg}°, Pitch: ${planeResult.pitchDeg}°")
 
-                            // Object Detection Pipeline on Full-Resolution Point Cloud Cropped to Bike Lane ROI
-                            val originalIntrinsics = CameraIntrinsics(originalFx, originalFy, originalCx, originalCy)
-                            val detectedObjects = ObjectDetector.detectObjectsFullRes(
-                                resizedMetricDepth = resizedMetricDepth,
-                                originalWidth = originalWidth,
-                                originalHeight = originalHeight,
-                                intrinsics = originalIntrinsics,
+                            // Object Detection Pipeline in 504x504 Model Space (Ground Plane Removed) & Scaled to Original Resolution
+                            val detectedObjects = ObjectDetector.detectObjects504(
+                                metricDepthValues = metricDepthValues,
+                                modelIntrinsics = modelIntrinsics,
                                 plane = planeResult,
-                                fullResMaskBytes = fullResMaskBytes
+                                roiMaskBytes = roiMaskBytes,
+                                originalWidth = originalWidth,
+                                originalHeight = originalHeight
                             )
 
-                            Log.d("DA3_OBJECTS", "Detected ${detectedObjects.size} objects in full-res bike lane ROI")
+                            Log.d("DA3_OBJECTS", "Detected ${detectedObjects.size} objects in bike lane ROI")
                             for ((idx, obj) in detectedObjects.withIndex()) {
                                 Log.d("DA3_OBJECTS", "Object $idx: distance=${obj.distanceMeters}m, height=${obj.heightMeters}m, pixels=${obj.pixelCount}")
                             }

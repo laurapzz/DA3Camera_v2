@@ -13,7 +13,7 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 data class DetectedObject(
-    val boundingBox: Rect,
+    val boundingBox: Rect, // In original image coordinates
     val distanceMeters: Float,
     val heightMeters: Float,
     val pixelCount: Int
@@ -22,32 +22,34 @@ data class DetectedObject(
 object ObjectDetector {
 
     /**
-     * Performs object detection strictly within the point cloud cropped to the bike lane ROI
-     * at original image resolution, removes the ground plane, runs connected components,
-     * filters out trees/overhead structures by height, and projects/draws bounding boxes.
+     * Performs object detection in 504x504 model space (ground plane removed, connected components),
+     * avoiding OutOfMemory errors on high-res photos, and scales the resulting bounding boxes
+     * to original image resolution.
      */
-    fun detectObjectsFullRes(
-        resizedMetricDepth: FloatArray,
+    fun detectObjects504(
+        metricDepthValues: FloatArray,
+        modelIntrinsics: CameraIntrinsics,
+        plane: PlaneResult,
+        roiMaskBytes: ByteArray,
         originalWidth: Int,
         originalHeight: Int,
-        intrinsics: CameraIntrinsics,
-        plane: PlaneResult,
-        fullResMaskBytes: ByteArray,
         groundDistThresh: Float = 0.15f,
-        minBlobArea: Int = 100,
+        minBlobArea: Int = 30,
         maxHeightMeters: Float = 2.5f,
         minHeightMeters: Float = 0.2f
     ): List<DetectedObject> {
-        val obstacleMask = Mat.zeros(originalHeight, originalWidth, CvType.CV_8UC1)
-        val maskData = ByteArray(originalWidth * originalHeight)
+        val width = 504
+        val height = 504
+        val obstacleMask = Mat.zeros(height, width, CvType.CV_8UC1)
+        val maskData = ByteArray(width * height)
 
-        for (v in 0 until originalHeight) {
-            for (u in 0 until originalWidth) {
-                val idx = v * originalWidth + u
-                val roiVal = if (idx < fullResMaskBytes.size) fullResMaskBytes[idx].toInt() and 0xFF else 0
-                if (roiVal > 0 && idx < resizedMetricDepth.size) {
-                    val d = resizedMetricDepth[idx]
-                    val p = RansacUtils.backprojectPoint(u.toFloat(), v.toFloat(), d, intrinsics)
+        for (v in 0 until height) {
+            for (u in 0 until width) {
+                val idx = v * width + u
+                val roiVal = if (idx < roiMaskBytes.size) roiMaskBytes[idx].toInt() and 0xFF else 0
+                if (roiVal > 0 && idx < metricDepthValues.size) {
+                    val d = metricDepthValues[idx]
+                    val p = RansacUtils.backprojectPoint(u.toFloat(), v.toFloat(), d, modelIntrinsics)
                     if (p != null && p.z in 0.5f..15.0f) {
                         val distToPlane = abs(plane.a * p.x + plane.b * p.y + plane.c * p.z + plane.d)
                         if (distToPlane > groundDistThresh) {
@@ -59,8 +61,7 @@ object ObjectDetector {
         }
         obstacleMask.put(0, 0, maskData)
 
-        // Morphological filtering to clean up noise and consolidate valid obstacles
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
+        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
         Imgproc.morphologyEx(obstacleMask, obstacleMask, Imgproc.MORPH_OPEN, kernel)
         Imgproc.morphologyEx(obstacleMask, obstacleMask, Imgproc.MORPH_CLOSE, kernel)
 
@@ -70,28 +71,30 @@ object ObjectDetector {
         val numLabels = Imgproc.connectedComponentsWithStats(obstacleMask, labels, stats, centroids)
 
         val detectedObjects = mutableListOf<DetectedObject>()
-        val labelsData = IntArray(originalWidth * originalHeight)
+        val labelsData = IntArray(width * height)
         labels.get(0, 0, labelsData)
 
+        val scaleX = originalWidth.toFloat() / width.toFloat()
+        val scaleY = originalHeight.toFloat() / height.toFloat()
+
         for (i in 1 until numLabels) {
-            val left = stats.get(i, Imgproc.CC_STAT_LEFT)[0].toInt()
-            val top = stats.get(i, Imgproc.CC_STAT_TOP)[0].toInt()
-            val w = stats.get(i, Imgproc.CC_STAT_WIDTH)[0].toInt()
-            val h = stats.get(i, Imgproc.CC_STAT_HEIGHT)[0].toInt()
+            val left504 = stats.get(i, Imgproc.CC_STAT_LEFT)[0].toInt()
+            val top504 = stats.get(i, Imgproc.CC_STAT_TOP)[0].toInt()
+            val w504 = stats.get(i, Imgproc.CC_STAT_WIDTH)[0].toInt()
+            val h504 = stats.get(i, Imgproc.CC_STAT_HEIGHT)[0].toInt()
             val area = stats.get(i, Imgproc.CC_STAT_AREA)[0].toInt()
 
             if (area < minBlobArea) continue
 
-            // Collect 3D points belonging to this component
             val componentPoints = mutableListOf<RansacUtils.Point3D>()
-            val step = maxOf(1, (w * h) / 400)
-            for (v in top until (top + h) step maxOf(1, step / 10)) {
-                for (u in left until (left + w) step maxOf(1, step / 10)) {
-                    if (u in 0 until originalWidth && v in 0 until originalHeight) {
-                        val idx = v * originalWidth + u
-                        if (labelsData[idx] == i && idx < resizedMetricDepth.size) {
-                            val d = resizedMetricDepth[idx]
-                            val p = RansacUtils.backprojectPoint(u.toFloat(), v.toFloat(), d, intrinsics)
+            val step = maxOf(1, (w504 * h504) / 200)
+            for (v in top504 until (top504 + h504) step maxOf(1, step / 10)) {
+                for (u in left504 until (left504 + w504) step maxOf(1, step / 10)) {
+                    if (u in 0 until width && v in 0 until height) {
+                        val idx = v * width + u
+                        if (labelsData[idx] == i && idx < metricDepthValues.size) {
+                            val d = metricDepthValues[idx]
+                            val p = RansacUtils.backprojectPoint(u.toFloat(), v.toFloat(), d, modelIntrinsics)
                             if (p != null) {
                                 componentPoints.add(p)
                             }
@@ -102,22 +105,26 @@ object ObjectDetector {
 
             if (componentPoints.isEmpty()) continue
 
-            // Distance to camera (median distance of points in component)
             val distances = componentPoints.map { sqrt(it.x * it.x + it.y * it.y + it.z * it.z) }.sorted()
             val medianDist = distances[distances.size / 2]
 
-            // Height of object (max Y - min Y among 3D points)
             val ys = componentPoints.map { it.y }
             val objHeight = abs((ys.maxOrNull() ?: 0f) - (ys.minOrNull() ?: 0f))
 
-            // Filter out trees, overhead foliage, or structures that are too tall (> 2.5m) or too flat (< 0.2m)
             if (objHeight !in minHeightMeters..maxHeightMeters) {
                 continue
             }
 
+            val origLeft = (left504 * scaleX).toInt().coerceIn(0, originalWidth - 1)
+            val origTop = (top504 * scaleY).toInt().coerceIn(0, originalHeight - 1)
+            val origRight = ((left504 + w504) * scaleX).toInt().coerceIn(0, originalWidth)
+            val origBottom = ((top504 + h504) * scaleY).toInt().coerceIn(0, originalHeight)
+
+            if (origRight <= origLeft || origBottom <= origTop) continue
+
             detectedObjects.add(
                 DetectedObject(
-                    boundingBox = Rect(left, top, left + w, top + h),
+                    boundingBox = Rect(origLeft, origTop, origRight, origBottom),
                     distanceMeters = medianDist,
                     heightMeters = objHeight,
                     pixelCount = area
@@ -169,7 +176,6 @@ object ObjectDetector {
             val textX = rect.left.toFloat().coerceAtLeast(10f)
             val textY = (rect.top - 12f).coerceAtLeast(40f)
 
-            // Draw background rectangle for text readability
             canvas.drawRect(textX - 6f, textY - 32f, textX + 260f, textY + 10f, paintTextBg)
             canvas.drawText(infoText, textX, textY, paintText)
         }
