@@ -2381,8 +2381,21 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnSelectOutputFolder)
             .setOnClickListener {
+                Toast.makeText(
+                    this,
+                    "Opening storage. Tap the top-left menu (3 lines) if needed to view Internal Storage / Downloads.",
+                    Toast.LENGTH_LONG
+                ).show()
 
-                outputFolderPicker.launch(null)
+                val initialUri = try {
+                    DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents",
+                        "primary:Download"
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+                outputFolderPicker.launch(initialUri)
             }
 
         findViewById<Button>(R.id.btnGallery).setOnClickListener {
