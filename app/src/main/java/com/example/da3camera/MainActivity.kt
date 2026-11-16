@@ -916,7 +916,11 @@ class MainActivity : AppCompatActivity() {
         correctedFx: Float,
         correctedFy: Float,
         correctedCx: Float,
-        correctedCy: Float
+        correctedCy: Float,
+        originalFx: Float,
+        originalFy: Float,
+        originalCx: Float,
+        originalCy: Float
     ) {
 
         val module = da3Module
@@ -1356,17 +1360,18 @@ class MainActivity : AppCompatActivity() {
                             Log.d("DA3_RANSAC", "Inlier ratio: ${planeResult.inlierRatio}")
                             Log.d("DA3_RANSAC", "Tilt: ${planeResult.tiltDeg}°, Roll: ${planeResult.rollDeg}°, Pitch: ${planeResult.pitchDeg}°")
 
-                            // Object Detection Pipeline inside Bike Lane ROI (Ground Plane Removed)
-                            val detectedObjects = ObjectDetector.detectObjects(
-                                metricDepth = metricDepthValues,
-                                width = 504,
-                                height = 504,
-                                intrinsics = modelIntrinsics,
+                            // Object Detection Pipeline on Full-Resolution Point Cloud Cropped to Bike Lane ROI
+                            val originalIntrinsics = CameraIntrinsics(originalFx, originalFy, originalCx, originalCy)
+                            val detectedObjects = ObjectDetector.detectObjectsFullRes(
+                                resizedMetricDepth = resizedMetricDepth,
+                                originalWidth = originalWidth,
+                                originalHeight = originalHeight,
+                                intrinsics = originalIntrinsics,
                                 plane = planeResult,
-                                roiMaskBytes = roiMaskBytes
+                                fullResMaskBytes = fullResMaskBytes
                             )
 
-                            Log.d("DA3_OBJECTS", "Detected ${detectedObjects.size} objects in bike lane ROI")
+                            Log.d("DA3_OBJECTS", "Detected ${detectedObjects.size} objects in full-res bike lane ROI")
                             for ((idx, obj) in detectedObjects.withIndex()) {
                                 Log.d("DA3_OBJECTS", "Object $idx: distance=${obj.distanceMeters}m, height=${obj.heightMeters}m, pixels=${obj.pixelCount}")
                             }
@@ -2567,7 +2572,11 @@ class MainActivity : AppCompatActivity() {
                             correctedFx = result.correctedIntrinsics.fx,
                             correctedFy = result.correctedIntrinsics.fy,
                             correctedCx = result.correctedIntrinsics.cx,
-                            correctedCy = result.correctedIntrinsics.cy
+                            correctedCy = result.correctedIntrinsics.cy,
+                            originalFx = intrinsics.fx,
+                            originalFy = intrinsics.fy,
+                            originalCx = intrinsics.cx,
+                            originalCy = intrinsics.cy
                         )
 
                     } catch (e: Exception) {
