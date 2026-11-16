@@ -25,6 +25,12 @@ The app combines PyTorch **ExecuTorch** for monocular depth estimation (**Depth 
   - Back-projects 2D image coordinates and metric depth into 3D spatial points $(X, Y, Z)$.
   - Fits ground plane equations ($ax + by + cz + d = 0$) using RANSAC.
   - Computes camera orientation parameters including ground plane tilt angle, pitch, and roll in degrees.
+- **Object Detection & Obstacle Analysis**:
+  - Crops 3D point clouds to the bike lane ROI.
+  - Removes the detected ground plane using RANSAC plane equations ($\text{dist} > \text{threshold}$).
+  - Performs connected component detection (`connectedComponentsWithStats`) on the above-ground obstacle mask.
+  - Computes distance to camera (median 3D Euclidean distance) and object height ($\max(Y) - \min(Y)$) from metric depth.
+  - Draws red bounding boxes with object distance and height metrics onto the original image (`*_objects_overlay.png`).
 - **Comprehensive Data Export**: Exports processed results using Android's Storage Access Framework (SAF):
   - 🎨 **Visual Overlay PNG** (`*_bikelane_overlay.png`): Original frame with rendered lane lines and semi-transparent bike lane polygon overlay.
   - ⬛ **Binary Mask PNG** (`*_segmentation.png`): Monochrome binary mask of the detected bike lane region.

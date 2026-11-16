@@ -1356,6 +1356,52 @@ class MainActivity : AppCompatActivity() {
                             Log.d("DA3_RANSAC", "Inlier ratio: ${planeResult.inlierRatio}")
                             Log.d("DA3_RANSAC", "Tilt: ${planeResult.tiltDeg}°, Roll: ${planeResult.rollDeg}°, Pitch: ${planeResult.pitchDeg}°")
 
+                            // Object Detection Pipeline inside Bike Lane ROI (Ground Plane Removed)
+                            val detectedObjects = ObjectDetector.detectObjects(
+                                metricDepth = metricDepthValues,
+                                width = 504,
+                                height = 504,
+                                intrinsics = modelIntrinsics,
+                                plane = planeResult,
+                                roiMaskBytes = roiMaskBytes
+                            )
+
+                            Log.d("DA3_OBJECTS", "Detected ${detectedObjects.size} objects in bike lane ROI")
+                            for ((idx, obj) in detectedObjects.withIndex()) {
+                                Log.d("DA3_OBJECTS", "Object $idx: distance=${obj.distanceMeters}m, height=${obj.heightMeters}m, pixels=${obj.pixelCount}")
+                            }
+
+                            val objectsOverlayBitmap = ObjectDetector.drawObjectsOverlay(
+                                selectedBitmap!!,
+                                detectedObjects
+                            )
+
+                            runOnUiThread {
+                                imagePreview.setImageBitmap(objectsOverlayBitmap)
+                                imagePreview.contentDescription = "Detected objects in bike lane ROI with distance and height"
+                                textImageInfo.text = "Detected ${detectedObjects.size} objects in bike lane. Red boxes show objects with distance & height."
+                            }
+
+                            if (outputFolderUri != null) {
+                                try {
+                                    val baseName = inputFileName.substringBeforeLast('.', inputFileName)
+                                    val objImageName = "${baseName}_objects_overlay.png"
+                                    val folder = DocumentFile.fromTreeUri(this, outputFolderUri!!)
+                                    if (folder != null) {
+                                        folder.findFile(objImageName)?.delete()
+                                        val outputFile = folder.createFile("image/png", objImageName)
+                                        if (outputFile != null) {
+                                            contentResolver.openOutputStream(outputFile.uri)?.use { output ->
+                                                objectsOverlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                                            }
+                                            Log.d("DA3_OBJECTS", "Saved objects overlay PNG successfully")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("DA3_OBJECTS", "Failed to save objects overlay PNG", e)
+                                }
+                            }
+
                             if (outputFolderUri != null) {
                                 runOnUiThread {
                                     androidx.appcompat.app.AlertDialog.Builder(this)
