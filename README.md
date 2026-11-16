@@ -6,7 +6,7 @@
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-1.31.1-005fed.svg)](https://onnxruntime.ai/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.10.0-5C3EE8.svg)](https://opencv.org/)
 
-**DA3Camera v2** (also known as **CameraDepthLane**) is an Android application designed for real-time monocular depth estimation, lane detection, 3D ground plane estimation, and bike lane segmentation.
+**DA3Camera v2** is an Android application designed for real-time monocular depth estimation, lane detection, 3D ground plane estimation, and bike lane segmentation.
 
 The app combines PyTorch **ExecuTorch** for monocular depth estimation (**Depth Anything v2**), **ONNX Runtime Android** for Ultra-Fast Lane Detection (**UFLDv2**), **OpenCV NDK (C++)** for native image processing and ROI mask generation, and **RANSAC 3D back-projection** for camera tilt/pitch/roll angle estimation.
 
